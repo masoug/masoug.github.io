@@ -1,6 +1,9 @@
 ---
-# Feel free to add content and custom Front Matter to this file.
-# To modify the layout, see https://jekyllrb.com/docs/themes/#overriding-theme-defaults
-
+layout: page
+title: About
 layout: home
 ---
+
+Hi! I am Sammy, a robotics and vision engineer at iRobot. I'm interested in robotics software related to perception, computer vision, simultaneous localization and mapping (SLAM), path planning, dynamics and controls. I also love to work hands-on with embedded system projects such as Arduino, BeagleBone, and Raspberry Pi.
+
+My interests span mutiple disciplines, including photography and art. Checkout the top menu links for details!
