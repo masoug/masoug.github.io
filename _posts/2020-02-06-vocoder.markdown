@@ -1,0 +1,43 @@
+---
+layout: post
+title:  "Channel Vocoder Adventure"
+date:   2020-02-06
+categories: vocoder audio signal processing music fft filters python scipy
+---
+
+Lately I've been quite fascinated by the robotic voices featured in many popular music artists like Daft Punk: [I Feel it Coming](https://youtu.be/qFLhGq0060w?start=140) and [Get Lucky](https://youtu.be/5NV6Rdv1a3I?start=140) I decided to implement a software vocoder as a way to learn and understand how they work. I found [a MATLAB implementation](https://sethares.engr.wisc.edu/vocoders/channelvocoder.html) to be very helpful for guiding the development of my vocoder. It uses the fast Fourier transform to apply modulations in the frequency domain before inverting back to the time domain, emulating the behavior of the original analog vocoder design. Aside from several readability tweaks my Python version follows the same steps as the MATLAB source. The source code is available on GitHub here: [masoug/vocoder/blob/master/vocoder.py](https://github.com/masoug/vocoder/blob/master/vocoder.py)
+
+# Example
+I've borrowed an excerpt from the reading of the [Gettysburg Address off NPR](https://www.npr.org/templates/story/story.php?storyId=1512410) as my modulator source, and used GarageBand synthesizers to generate simple chord progressions to serve as the carrier.
+
+#### Carrier
+<audio controls>
+  <source src="/assets/vocoder/carrier.wav" type="audio/wav">
+  Your browser does not support the audio element.
+</audio> 
+
+#### Modulator
+<audio controls>
+  <source src="/assets/vocoder/modulator.wav" type="audio/wav">
+  Your browser does not support the audio element.
+</audio> 
+
+#### Vocoded Result
+<audio controls>
+  <source src="/assets/vocoder/vocoded_output.wav" type="audio/wav">
+  Your browser does not support the audio element.
+</audio>
+
+Feel free to use the script to generate your own vocoded sounds! For the modulator signal, have the speaker enunciate their words clearly and slowly to achieve the best effect.
+
+# How they work
+
+[Channel vocoders](https://en.wikipedia.org/wiki/Vocoder), short for "voice encoder", were originally invented to [compress a human speech signal for transmission across long distances](https://youtu.be/OvR4qK0B--w) by breaking down the sound signal into lower-bandwidth frequency components. These frequency components are used to modulate the sound of a carrier signal, usually from a noisy or harmonically-rich instrument.
+
+<embed src="/assets/vocoder-block-diagram.svg" width="100%"/>
+
+I think the underlying trick that makes vocoders sound they way they do is through the concept of [timbre](https://en.wikipedia.org/wiki/Timbre). Intuitively, timbre is like the "texture" for a particular sound, which is why we can differentiate between different instrument sounds even if they're playing the same note and volume. Vocoders thus "overlay" the timbre of one signal onto the timbre of another, giving the carrier signal the acoustic "texture" of the modulator signal. Thus the selection of the carrier signal must be strategic so as not to interfere with the modulator's spectral characteristics. For example, if the carrier is mostly low-frequency like a bass guitar, the modulator signal must share similar low-frequency tones for the vocoder to work. Otherwise, a high-frequency modulator coupled with a low frequency carrier will "cancel-out," yielding a very quiet synthesized result. Hence it is recommended to use a harmonically rich carrier source like a synthesizer that spans many octaves, enough to cover the range of the human voice. The effect should sound better if the human voice follows the carrier source in pitch, which is why a vocoder setups generally have both a microphone and synthesizer operating at the same time.
+
+# Improve voice details
+
+One thing I noticed however was the loss of higher-frequency details from the modulator when vocoded: The synthesized human voice tends to sound muffled or mumbling because the higher-frequency aspects of the modulator are attenuated by the lack of similarly-high frequency carrier signals. I've hacked a simple ramp gain across the frequency spectrum in my script to accentuate the higher frequencies to combat this, with somewhat successful results. Ideally I should select a specific frequency band that best represents the human vocal range to avoid accentuating unwanted extremely-high-frequency tones. That would be a nice next improvement to make.
