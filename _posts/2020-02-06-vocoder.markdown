@@ -2,7 +2,6 @@
 layout: post
 title:  "Channel Vocoder Adventure"
 date:   2020-02-06
-categories: vocoder audio signal processing music fft filters python scipy
 ---
 
 Lately I've been quite fascinated by the robotic voices featured in many popular music artists like Daft Punk: [I Feel it Coming](https://youtu.be/qFLhGq0060w?start=140) and [Get Lucky](https://youtu.be/5NV6Rdv1a3I?start=140) I decided to implement a software vocoder as a way to learn and understand how they work. I found [a MATLAB implementation](https://sethares.engr.wisc.edu/vocoders/channelvocoder.html) to be very helpful for guiding the development of my vocoder. It uses the fast Fourier transform to apply modulations in the frequency domain before inverting back to the time domain, emulating the behavior of the original analog vocoder design. Aside from several readability tweaks my Python version follows the same steps as the MATLAB source. The source code is available on GitHub here: [masoug/vocoder/blob/master/vocoder.py](https://github.com/masoug/vocoder/blob/master/vocoder.py)

@@ -2,7 +2,6 @@
 layout: post
 title:  "Astrophotography Exposure Stacking"
 date:   2020-01-12
-categories: astrophotography photography computational cameras astronomy long-exposure
 ---
 This past weekend I was visiting some friends in [Santa Barbara, California](https://goo.gl/maps/Wyk8eLGLn7WY6gFt8) and brought my camera and tripod with me. Aside from taking typical touristy pictures I spent some time in the evening with a friend learning about long-exposure and astrophotography. Long-exposure is a lot of fun to play with, and creates some pretty interesting effects:
 
