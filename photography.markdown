@@ -18,4 +18,4 @@ These large scale panoramas are composed of many telephotos stitched across a wi
 <iframe width="640" height="480" src="https://gigapan.com/embeds/boohuCD_mbE/" frameborder="0" allowfullscreen webkitallowfullscreen mozallowfullscreen ></iframe>
 
 ## Bernal Heights
-<iframe width="640" height="480" src="https://www.gigapan.org/embeds/4hwmg_SfOOw/" frameborder="0" allowfullscreen webkitallowfullscreen mozallowfullscreen ></iframe>
+<iframe width="640" height="480" src="https://gigapan.com/embeds/4hwmg_SfOOw/" frameborder="0" allowfullscreen webkitallowfullscreen mozallowfullscreen ></iframe>
