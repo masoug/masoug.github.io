@@ -10,4 +10,12 @@ Around 2019 I have purchased my first digital SLR camera: [Nikon D3500](https://
 
 I'm also interested in topics related to computational photography such as panoramas, high-dynamic-range (HDR) imagery, and astrophotography. I have been using [Hugin](http://hugin.sourceforge.net/) as my primary computational photography toolset. My blog has more information about my experiences with computational photography.
 
-<iframe width="960" height="720" src="https://gigapan.com/embeds/boohuCD_mbE/" frameborder="0" allowfullscreen webkitallowfullscreen mozallowfullscreen ></iframe>
+# Large Scale Panoramas
+These large scale panoramas are composed of many telephotos stitched across a wide field of view. The broad, yet detailed capture of the landscape adds dimension and depth to the composition, compelling the viewer to immerse themselves in the vastness of the scene.
+
+
+## Mount Tamalpais
+<iframe width="640" height="480" src="https://gigapan.com/embeds/boohuCD_mbE/" frameborder="0" allowfullscreen webkitallowfullscreen mozallowfullscreen ></iframe>
+
+## Bernal Heights
+<iframe width="640" height="480" src="https://www.gigapan.org/embeds/4hwmg_SfOOw/" frameborder="0" allowfullscreen webkitallowfullscreen mozallowfullscreen ></iframe>
