@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <meta charset="UTF-8">
+  <title>Performance Table Calculator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 50px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Cruise Performance Calculator</h1>
+  <p>
+    Interpolates data from aircraft cruise performance tables.
+    Upload a comma-seperated-value file (.csv) here.
+    It must match the format of the example <a href="/assets/c172-cruise-performance-tables.csv">here.</a></p>
+  <input type="file" id="performance_table_input" accept=".csv" />
+
+  <div class="slider-group">
+    <div class="slider-label">Pressure Altitude (ft MSL)</div>
+    <input type="range" id="pressure_altitude_slider"
+        min="2000" max="12000" value="5000"
+        oninput="updateTextBox('pressure_altitude_slider', 'pressure_altitude_text')"
+        disabled />
+    <input type="text" id="pressure_altitude_text" value="5000"
+        oninput="updateSlider('pressure_altitude_text', 'pressure_altitude_slider')"
+        disabled />
+  </div>
+
+  <div class="slider-group">
+    <div class="slider-label">Engine RPM</div>
+    <input type="range" id="engine_rpm_slider"
+        min="2100" max="2650" value="2300"
+        oninput="updateTextBox('engine_rpm_slider', 'engine_rpm_text')"
+        disabled />
+    <input type="text" id="engine_rpm_text" value="2300"
+        oninput="updateSlider('engine_rpm_text', 'engine_rpm_slider')"
+        disabled />
+  </div>
+
+  <div class="slider-group">
+    <div class="slider-label">Outside Air Temperature (celsius)</div>
+    <input type="range" id="oat_slider" value="15"
+        min="-5" max="35"
+        oninput="updateTextBox('oat_slider', 'oat_text')"
+        disabled />
+    <input type="text" id="oat_text" value="15"
+        oninput="updateSlider('oat_text', 'oat_slider')"
+        disabled />
+  </div>
+
+  <li>
+    <ul>% Brake Horse Power: <span id="result_bhp"></span></ul>
+    <ul>Knots True Airspeed: <span id="result_ktas"></span></ul>
+    <ul>Gallons per Hour: <span id="result_gph"></span></ul>
+  </li>
+
+  <script>
+    const bhp_entries = new Map();
+    const ktas_entries = new Map();
+    const gph_entries = new Map();
+
+    function populate_entry(table, pa, rpm, oat, value) {
+      if (!table.has(pa)) {
+        table.set(pa, new Map());
+        }
+        if (!table.get(pa).has(rpm)) {
+          table.get(pa).set(rpm, new Map());
+        }
+        table.get(pa).get(rpm).set(oat, value);
+    }
+
+    function process_table(results) {
+      for (const row of results.data) {
+        populate_entry(bhp_entries, row.pressure_altitude, row.rpm, row.oat, row.percent_bhp);
+        populate_entry(ktas_entries, row.pressure_altitude, row.rpm, row.oat, row.ktas);
+        populate_entry(gph_entries, row.pressure_altitude, row.rpm, row.oat, row.gph);
+      }
+
+      // set input bounds
+      document.getElementById("pressure_altitude_slider").min = Math.min(...results.data.map((e) => e.pressure_altitude));
+      document.getElementById("pressure_altitude_slider").max = Math.max(...results.data.map((e) => e.pressure_altitude));
+      document.getElementById("engine_rpm_slider").min = Math.min(...results.data.map((e) => e.rpm));
+      document.getElementById("engine_rpm_slider").max = Math.max(...results.data.map((e) => e.rpm));
+      document.getElementById("oat_slider").min = Math.min(...results.data.map((e) => e.oat));
+      document.getElementById("oat_slider").max = Math.max(...results.data.map((e) => e.oat));
+
+      // enable inputs
+      document.getElementById("pressure_altitude_slider").disabled = false;
+      document.getElementById("pressure_altitude_text").disabled = false;
+      document.getElementById("engine_rpm_slider").disabled = false;
+      document.getElementById("engine_rpm_text").disabled = false;
+      document.getElementById("oat_slider").disabled = false;
+      document.getElementById("oat_text").disabled = false;
+    }
+
+    function lowerBound(arr, target) {
+      let low = 0;
+      let high = arr.length - 1;
+      let ans = arr.length; // Default to array length if target is greater than all elements
+
+      while (low <= high) {
+        let mid = Math.floor((low + high) / 2);
+
+        if (arr[mid] >= target) {
+          ans = mid; // Found a potential lower bound, try to find an even smaller index
+          high = mid - 1;
+        } else {
+          low = mid + 1; // Current element is too small, search in the right half
+        }
+      }
+      return ans;
+    }
+
+    function extract_subtables(table, value, errmsg) {
+      const keys = Array.from(table.keys()).toSorted((a, b) => a - b);
+      // TODO: handle cases where pa == pa_keys[0] or pa == pa_keys.at(-1)
+      if (value <= keys[0] || value >= keys.at(-1)) {
+        console.error(errmsg);
+        return null;
+      }
+
+      const lower_idx = lowerBound(keys, value)-1;
+      const lower_key = keys[lower_idx];
+      const upper_key = keys[lower_idx+1];
+      console.assert((lower_idx >= 0) && (lower_idx < (keys.length-1)));
+      const lower_subtable = table.get(lower_key);
+      const upper_subtable = table.get(upper_key);
+      const interpolation_factor = (value - lower_key) / (upper_key-lower_key);
+
+      return [lower_key, upper_key, lower_subtable, upper_subtable, interpolation_factor];
+    }
+
+    function interpolate_entries(table, pa, rpm, oat) {
+      const pa_lookup_result = extract_subtables(table, pa, "Pressure altitude out of bounds");
+      if (pa_lookup_result == null) {
+        return null;
+      }
+      const [lower_pa_key, upper_pa_key, 
+             lower_pa_subtable, upper_pa_subtable,
+             pa_factor] = pa_lookup_result;
+
+      /** Engine RPM **/
+      const lower_pa_lookup_result = extract_subtables(lower_pa_subtable, rpm, "RPM out of bounds");
+      if (lower_pa_lookup_result == null) {
+        return null;
+      }
+      const [lower_pa_lower_rpm_key, lower_pa_upper_rpm_key, 
+             lower_pa_lower_rpm_subtable, lower_pa_upper_rpm_subtable,
+             lower_pa_rpm_factor] = lower_pa_lookup_result;
+
+      const upper_pa_lookup_result = extract_subtables(upper_pa_subtable, rpm, "RPM out of bounds");
+      if (upper_pa_lookup_result == null) {
+        return null;
+      }
+      const [upper_pa_lower_rpm_key, upper_pa_upper_rpm_key, 
+             upper_pa_lower_rpm_subtable, upper_pa_upper_rpm_subtable,
+             upper_pa_rpm_factor] = upper_pa_lookup_result;
+
+      /** Outside Air Temperature **/
+      const lower_pa_lower_rpm_oat_lookup_result = extract_subtables(lower_pa_lower_rpm_subtable, oat, "OAT out of bounds");
+      if (lower_pa_lower_rpm_oat_lookup_result == null) {
+        return null;
+      }
+      const [lower_pa_lower_rpm_lower_oat_key, lower_pa_lower_rpm_upper_oat_key,
+        lower_pa_lower_rpm_lower_oat_value, lower_pa_lower_rpm_upper_oat_value,
+        lower_pa_lower_rpm_oat_factor] = lower_pa_lower_rpm_oat_lookup_result;
+      const lower_pa_lower_rpm_interpolated = (1.0-lower_pa_lower_rpm_oat_factor)*lower_pa_lower_rpm_lower_oat_value + lower_pa_lower_rpm_oat_factor*lower_pa_lower_rpm_upper_oat_value;
+
+      const lower_pa_upper_rpm_oat_lookup_result = extract_subtables(lower_pa_upper_rpm_subtable, oat, "OAT out of bounds");
+      if (lower_pa_upper_rpm_oat_lookup_result == null) {
+        return null;
+      }
+      const [lower_pa_upper_rpm_lower_oat_key, lower_pa_upper_rpm_upper_oat_key,
+        lower_pa_upper_rpm_lower_oat_value, lower_pa_upper_rpm_upper_oat_value,
+        lower_pa_upper_rpm_oat_factor] = lower_pa_upper_rpm_oat_lookup_result;
+      const lower_pa_upper_rpm_interpolated = (1.0-lower_pa_upper_rpm_oat_factor)*lower_pa_upper_rpm_lower_oat_value + lower_pa_upper_rpm_oat_factor*lower_pa_upper_rpm_upper_oat_value;
+
+      const upper_pa_lower_rpm_oat_lookup_result = extract_subtables(upper_pa_lower_rpm_subtable, oat, "OAT out of bounds");
+      if (upper_pa_lower_rpm_oat_lookup_result == null) {
+        return null;
+      }
+      const [upper_pa_lower_rpm_lower_oat_key, upper_pa_lower_rpm_upper_oat_key,
+        upper_pa_lower_rpm_lower_oat_value, upper_pa_lower_rpm_upper_oat_value,
+        upper_pa_lower_rpm_oat_factor] = upper_pa_lower_rpm_oat_lookup_result;
+      const upper_pa_lower_rpm_interpolated = (1.0-upper_pa_lower_rpm_oat_factor)*upper_pa_lower_rpm_lower_oat_value + upper_pa_lower_rpm_oat_factor*upper_pa_lower_rpm_upper_oat_value;
+
+      const upper_pa_upper_rpm_oat_lookup_result = extract_subtables(upper_pa_upper_rpm_subtable, oat, "OAT out of bounds");
+      if (upper_pa_upper_rpm_oat_lookup_result == null) {
+        return null;
+      }
+      const [upper_pa_upper_rpm_lower_oat_key, upper_pa_upper_rpm_upper_oat_key,
+        upper_pa_upper_rpm_lower_oat_value, upper_pa_upper_rpm_upper_oat_value,
+        upper_pa_upper_rpm_oat_factor] = upper_pa_upper_rpm_oat_lookup_result;
+      const upper_pa_upper_rpm_interpolated = (1.0-upper_pa_upper_rpm_oat_factor)*upper_pa_upper_rpm_lower_oat_value + upper_pa_upper_rpm_oat_factor*upper_pa_upper_rpm_upper_oat_value;
+
+      const lower_pa_interpolated = (1.0-lower_pa_rpm_factor)*lower_pa_lower_rpm_interpolated + lower_pa_rpm_factor*lower_pa_upper_rpm_interpolated;
+      const upper_pa_interpolated = (1.0-upper_pa_rpm_factor)*upper_pa_lower_rpm_interpolated + upper_pa_rpm_factor*upper_pa_upper_rpm_interpolated;
+
+      const interpolation_result = (1.0-pa_factor)*lower_pa_interpolated + pa_factor*upper_pa_interpolated;
+
+      return interpolation_result;
+
+      console.log("=== Lookup Debug ===");
+      console.log(lower_pa_key, "-->", lower_pa_lower_rpm_key, lower_pa_rpm_factor, "-->", lower_pa_lower_rpm_lower_oat_key, lower_pa_lower_rpm_oat_factor, lower_pa_lower_rpm_interpolated);
+      console.log("\t\t      ", lower_pa_lower_rpm_upper_oat_key);
+
+      console.log("\t", lower_pa_upper_rpm_key, "------->", lower_pa_upper_rpm_lower_oat_key, lower_pa_upper_rpm_oat_factor, lower_pa_upper_rpm_interpolated);
+      console.log("\t\t      ", lower_pa_upper_rpm_upper_oat_key);
+
+      console.log(pa_factor);
+
+      console.log(upper_pa_key, "-->", upper_pa_lower_rpm_key, upper_pa_rpm_factor, "-->", upper_pa_lower_rpm_lower_oat_key, upper_pa_lower_rpm_oat_factor, upper_pa_lower_rpm_interpolated);
+      console.log("\t\t      ", upper_pa_lower_rpm_upper_oat_key);
+
+      console.log("\t", upper_pa_upper_rpm_key, "------->", upper_pa_upper_rpm_lower_oat_key, upper_pa_upper_rpm_oat_factor, upper_pa_upper_rpm_interpolated);
+      console.log("\t\t      ", upper_pa_upper_rpm_upper_oat_key);
+
+      console.log("interpolation result ", interpolation_result);
+    }
+
+    function update_output() {
+      const pa = parseFloat(document.getElementById("pressure_altitude_text").value);
+      const rpm = parseFloat(document.getElementById("engine_rpm_text").value);
+      const oat = parseFloat(document.getElementById("oat_text").value);
+      
+      const result_bhp = interpolate_entries(bhp_entries, pa, rpm, oat);
+      if (result_bhp == null) {
+        document.getElementById("result_bhp").textContent = "N/A";
+      } else {
+        document.getElementById("result_bhp").textContent= Math.round(result_bhp);
+      }
+      
+      const result_ktas = interpolate_entries(ktas_entries, pa, rpm, oat);
+      if (result_ktas == null) {
+        document.getElementById("result_ktas").textContent = "N/A";
+      } else {
+        document.getElementById("result_ktas").textContent= Math.round(result_ktas);
+      }
+      
+      const result_gph = interpolate_entries(gph_entries, pa, rpm, oat);
+      if (result_gph == null) {
+        document.getElementById("result_gph").textContent = "N/A";
+      } else {
+        document.getElementById("result_gph").textContent= Math.round(10.0*result_gph)/10.0;
+      }
+    }
+
+    document
+        .getElementById('performance_table_input')
+        .addEventListener('change', function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      Papa.parse(file, {
+        header: true,
+        dynamicTyping: true,
+        complete: process_table,
+      });
+    });
+
+    function updateTextBox(sliderId, textId) {
+      const slider = document.getElementById(sliderId);
+      const textBox = document.getElementById(textId);
+      textBox.value = slider.value;
+      update_output();
+    }
+
+    function updateSlider(textId, sliderId) {
+      const text = document.getElementById(textId);
+      const slider = document.getElementById(sliderId);
+      let value = parseInt(text.value, 10);
+      if (!isNaN(value)) {
+        // Clamp value between slider min and max
+        value = Math.max(parseInt(slider.min), Math.min(parseInt(slider.max), value));
+        slider.value = value;
+        text.value = value;
+        update_output();
+      }
+    }
+  </script>
+
+</body>
+</html>
