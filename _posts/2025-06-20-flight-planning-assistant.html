@@ -24,7 +24,10 @@
 
   Upload your flight plan file here: <input type="file" id="fplFile" accept=".fpl" />
   <b id="route_name_label"></b>
-  Cruise Altitude: <span id="cruise_altitude_label"></span> feet MSL
+  Cruise Altitude: <span id="cruise_altitude_label">???</span> feet MSL
+  Departure Time: <span id="departure_time_label">???</span>
+  Winds: <span id="wind_status_label">???</span>
+
   <script>
     function zoomToAllAnnotations(map) {
       const bounds = L.latLngBounds();
@@ -76,59 +79,92 @@
       const reader = new FileReader();
 
       reader.onload = function (e) {
-        // clear everything off map first
-        map.eachLayer(layer => {
-          if (!(layer instanceof L.TileLayer)) {
-            map.removeLayer(layer);
-          }
-        });
+        try {
+          // clear everything off map first
+          map.eachLayer(layer => {
+            if (!(layer instanceof L.TileLayer)) {
+              map.removeLayer(layer);
+            }
+          });
 
-        // load FPL xml
-        const xml = e.target.result;
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xml, 'application/xml');
+          // load FPL xml
+          const xml = e.target.result;
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(xml, 'application/xml');
 
-        // capture cruising altitude
-        const cruiseAltitudeXML = xmlDoc.querySelector("flight-plan > flight-data > altitude-ft");
-        const cruise_altitude_feet = parseFloat(cruiseAltitudeXML.textContent);
-        document.getElementById("cruise_altitude_label").textContent = cruise_altitude_feet;
+          // capture cruising altitude
+          const cruiseAltitudeXML = xmlDoc.querySelector("flight-plan > flight-data > altitude-ft");
+          const cruise_altitude_feet = parseFloat(cruiseAltitudeXML.textContent);
+          document.getElementById("cruise_altitude_label").textContent = cruise_altitude_feet;
 
-        // capture time of departure
-        // const etdXML = xmlDoc.querySelector("flight-plan > flight-data > etd-zulu");
-        // const etd_zulu_str = parseFloat(etdXML.textContent);
+          // capture time of departure
+          const etdXML = xmlDoc.querySelector("flight-plan > flight-data > etd-zulu");
+          const etd_str = etdXML.textContent;
+          const etd = new Date(etd_str.replace(/^(\d{4})(\d{2})(\d{2})T/, '$1-$2-$3T'));
+          document.getElementById("departure_time_label").textContent = etd;
+          document.getElementById("departure_time_label").setAttribute('title', etd_str);
 
-        // Draw waypoints
-        const all_waypoints = new Map();
-        const waypointTableXML = xmlDoc.getElementsByTagName('waypoint');
-        Array.from(waypointTableXML).forEach(wpt => {
-          const id = wpt.getElementsByTagName('identifier')[0].textContent;
-          const lat = wpt.getElementsByTagName('lat')[0].textContent;
-          const lon = wpt.getElementsByTagName('lon')[0].textContent;
-          all_waypoints.set(id, [lat, lon]);
-          L.marker([lat, lon])
-            .addTo(map)
-            .bindPopup(`<b>${id}</b>`);
-        });
+          // Draw waypoints
+          const all_waypoints = new Map();
+          const waypointTableXML = xmlDoc.getElementsByTagName('waypoint');
+          Array.from(waypointTableXML).forEach(wpt => {
+            const id = wpt.getElementsByTagName('identifier')[0].textContent;
+            const lat = wpt.getElementsByTagName('lat')[0].textContent;
+            const lon = wpt.getElementsByTagName('lon')[0].textContent;
+            all_waypoints.set(id, [lat, lon]);
+            L.marker([lat, lon])
+              .addTo(map)
+              .bindPopup(`<b>${id}</b>`);
+          });
 
-        // Draw route lines b/w waypoints
-        const routeTableXML = xmlDoc.getElementsByTagName('route')[0];
-        const route_name = routeTableXML.getElementsByTagName("route-name")[0].textContent;
-        document.getElementById("route_name_label").textContent = route_name;
-        const route = Array.from(routeTableXML.getElementsByTagName('route-point')).map(route_pt => {
-          return route_pt.getElementsByTagName("waypoint-identifier")[0].textContent;
-        });
-        for (let i = 0; i < route.length - 1; i++) {
-          const from_id = route[i];
-          const to_id = route[i + 1];
+          // fetch winds aloft data
+          map.once('moveend', () => {
+            const zoom = map.getZoom();
+            const bounds = map.getBounds();
 
-          const from_ltln = all_waypoints.get(from_id);
-          const to_ltln = all_waypoints.get(to_id);
+            const url = new URL('https://aviation-weather-proxy.sammy-e3f.workers.dev/');
+            url.searchParams.set('wrap', true);
+            url.searchParams.set('zoom', zoom);
+            url.searchParams.set('model', 'gfaak');
+            url.searchParams.set('level', '060');
+            url.searchParams.set('density', '0');
+            url.searchParams.set('bbox', bounds.toBBoxString());
+            url.searchParams.set('dref', '20250621');
+            url.searchParams.set('tref', '13');
+            url.searchParams.set('fhr', '05');
 
-          function route_leg_tooltip(e) {
-            const dist = haversineDistance(from_ltln[0], from_ltln[1], to_ltln[0], to_ltln[1]);
-            const bearing = initialBearing(from_ltln[0], from_ltln[1], to_ltln[0], to_ltln[1]);
+            // calculate bounds of the waypoints
+            fetch(url.toString())
+              .then(res => res.json())
+              .then(function (geo_json) {
+                L.geoJSON(geo_json, {
+                  onEachFeature: function (feature, layer) {
+                    console.log(feature);
+                  }
+                });
 
-            const tooltipHTML = `<b>${from_id} - ${to_id}</b>
+              });
+          });
+
+          // Draw route lines b/w waypoints
+          const routeTableXML = xmlDoc.getElementsByTagName('route')[0];
+          const route_name = routeTableXML.getElementsByTagName("route-name")[0].textContent;
+          document.getElementById("route_name_label").textContent = route_name;
+          const route = Array.from(routeTableXML.getElementsByTagName('route-point')).map(route_pt => {
+            return route_pt.getElementsByTagName("waypoint-identifier")[0].textContent;
+          });
+          for (let i = 0; i < route.length - 1; i++) {
+            const from_id = route[i];
+            const to_id = route[i + 1];
+
+            const from_ltln = all_waypoints.get(from_id);
+            const to_ltln = all_waypoints.get(to_id);
+
+            function route_leg_tooltip(e) {
+              const dist = haversineDistance(from_ltln[0], from_ltln[1], to_ltln[0], to_ltln[1]);
+              const bearing = initialBearing(from_ltln[0], from_ltln[1], to_ltln[0], to_ltln[1]);
+
+              const tooltipHTML = `<b>${from_id} - ${to_id}</b>
             <table style="width: 100%;">
               <tr>
                 <td style="text-align: left;">Distance:</td>
@@ -136,39 +172,42 @@
               </tr>
               <tr>
                 <td style="text-align: left;">Ground Track:</td>
-                <td style="text-align: right;">${Math.round(bearing)}°</td>
+                <td style="text-align: right;">${Math.round(bearing)}°T</td>
               </tr>
             </table>`;
 
-            L.popup()
-              .setLatLng(e.latlng)
-              .setContent(tooltipHTML)
-              .openOn(map);
+              L.popup()
+                .setLatLng(e.latlng)
+                .setContent(tooltipHTML)
+                .openOn(map);
+            }
+
+            const line = L.polyline([from_ltln, to_ltln], { color: 'red' }).addTo(map);
+            // Add arrow using PolylineDecorator
+            const arrow = L.polylineDecorator(line, {
+              patterns: [
+                {
+                  offset: '50%',
+                  repeat: 0,
+                  symbol: L.Symbol.arrowHead({
+                    pixelSize: 17,
+                    polygon: false,
+                    pathOptions: { weight: 4, color: 'red' }
+                  })
+                }
+              ]
+            }).addTo(map);
+
+            // Attach click handler to each segment
+            line.on('click', route_leg_tooltip);
+            arrow.on('click', route_leg_tooltip);
           }
 
-          const line = L.polyline([from_ltln, to_ltln], { color: 'red' }).addTo(map);
-          // Add arrow using PolylineDecorator
-          const arrow = L.polylineDecorator(line, {
-            patterns: [
-              {
-                offset: '50%',
-                repeat: 0,
-                symbol: L.Symbol.arrowHead({
-                  pixelSize: 17,
-                  polygon: false,
-                  pathOptions: { weight: 4, color: 'red' }
-                })
-              }
-            ]
-          }).addTo(map);
-
-          // Attach click handler to each segment
-          line.on('click', route_leg_tooltip);
-          arrow.on('click', route_leg_tooltip);
+          // Zoom to everything except tiles
+          zoomToAllAnnotations(map);
+        } catch (error) {
+          alert(`Failed to load flight plan: ${error.message}`);
         }
-
-        // Zoom to everything except tiles
-        zoomToAllAnnotations(map);
       };
 
       reader.readAsText(file);
